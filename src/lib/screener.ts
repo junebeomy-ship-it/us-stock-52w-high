@@ -179,6 +179,9 @@ export async function scanRegion(
       const price = q.regularMarketPrice as number;
       const high52w = q.fiftyTwoWeekHigh as number;
       if (typeof price !== "number" || typeof high52w !== "number" || high52w <= 0) continue;
+      // 실제 종목만: 워런트·CBBC·파생상품은 시가총액이 없다 → 시가총액 있는 것만 포함
+      const mc = q.marketCap;
+      if (typeof mc !== "number" || mc <= 0) continue;
       const exch = (q.fullExchangeName as string) || "";
       all.push({
         symbol: q.symbol as string,
@@ -199,7 +202,8 @@ export async function scanRegion(
     offset += size;
     if (total && offset >= total) break;
   }
-  return { results: all, total: total || all.length };
+  // total은 실제 종목(워런트 제외) 수로 표시
+  return { results: all, total: all.length };
 }
 
 // ---------- 표시 대상(신고가 근접)에만 시가총액/스파크라인 채우기 ----------
