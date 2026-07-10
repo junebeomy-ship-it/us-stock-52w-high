@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "미국·한국·일본 주식 52주 신고가 스크리너",
-  description: "미국(S&P 500)·한국(코스피·코스닥)·일본(도쿄증권거래소) 종목의 52주 신고가 근접/경신 현황을 보여주는 스크리너",
+  title: "미국·한국·일본·홍콩·중국 주식 52주 신고가 스크리너",
+  description:
+    "미국(S&P 500)·한국(코스피·코스닥)·일본(도쿄증권거래소)·홍콩·중국(상하이·선전) 종목의 52주 신고가 근접/경신 현황을 보여주는 스크리너",
 };
 
 export default function RootLayout({
