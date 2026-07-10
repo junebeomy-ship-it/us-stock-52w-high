@@ -14,6 +14,8 @@ type StockResult = {
   isNewHigh: boolean;
   currency: string;
   exchange: string;
+  marketCap: number | null;
+  spark: number[] | null;
 };
 
 type ApiResponse = {
@@ -25,7 +27,7 @@ type ApiResponse = {
   results: StockResult[];
 };
 
-type Market = "US" | "KR" | "JP";
+type Market = "US" | "KR" | "JP" | "HK" | "CN";
 
 const MARKET_CONFIG: Record<
   Market,
@@ -52,20 +54,97 @@ const MARKET_CONFIG: Record<
     universeDesc: "도쿄증권거래소 프라임/스탠다드/그로스 전 종목",
     categoryLabel: "시장",
   },
+  HK: {
+    label: "홍콩",
+    flag: "🇭🇰",
+    endpoint: "/api/screener/hk",
+    universeDesc: "홍콩 거래소 전 종목",
+    categoryLabel: "시장",
+  },
+  CN: {
+    label: "중국",
+    flag: "🇨🇳",
+    endpoint: "/api/screener/cn",
+    universeDesc: "상하이·선전 전 종목",
+    categoryLabel: "거래소",
+  },
 };
 
 function categoryOf(market: Market, r: StockResult): string {
   return market === "US" ? r.sector : r.market;
 }
 
+function currencySymbol(cur: string): string {
+  if (cur === "KRW") return "₩";
+  if (cur === "JPY") return "¥";
+  if (cur === "CNY") return "¥";
+  if (cur === "HKD") return "HK$";
+  if (cur === "USD") return "$";
+  return "";
+}
+
 function formatAmount(currency: string, value: number): string {
   if (currency === "KRW") return `₩${Math.round(value).toLocaleString("ko-KR")}`;
   if (currency === "JPY") return `¥${Math.round(value).toLocaleString("ja-JP")}`;
+  if (currency === "CNY") return `¥${value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
+  if (currency === "HKD") return `HK$${value.toLocaleString("en-HK", { maximumFractionDigits: 2 })}`;
   return `$${value.toFixed(2)}`;
 }
 
 function formatPrice(r: StockResult): string {
   return formatAmount(r.currency, r.price);
+}
+
+function formatMarketCap(cur: string, v: number | null): string {
+  if (v == null || !isFinite(v)) return "-";
+  const s = currencySymbol(cur);
+  if (cur === "USD") {
+    if (v >= 1e12) return `${s}${(v / 1e12).toFixed(2)}T`;
+    if (v >= 1e9) return `${s}${(v / 1e9).toFixed(2)}B`;
+    if (v >= 1e6) return `${s}${(v / 1e6).toFixed(0)}M`;
+    return `${s}${Math.round(v).toLocaleString()}`;
+  }
+  // 아시아 통화: 조 / 억 단위
+  if (v >= 1e12) return `${s}${(v / 1e12).toFixed(2)}조`;
+  if (v >= 1e8) return `${s}${Math.round(v / 1e8).toLocaleString("ko-KR")}억`;
+  return `${s}${Math.round(v).toLocaleString("ko-KR")}`;
+}
+
+function Sparkline({ data }: { data: number[] | null }) {
+  if (!data || data.length < 2) return <span className="text-zinc-300">-</span>;
+  const w = 68;
+  const h = 22;
+  const pad = 2;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const points = data
+    .map((v, i) => {
+      const x = pad + (i / (data.length - 1)) * (w - 2 * pad);
+      const y = pad + (1 - (v - min) / range) * (h - 2 * pad);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const up = data[data.length - 1] >= data[0];
+  const color = up ? "#059669" : "#dc2626";
+  return (
+    <svg
+      width={w}
+      height={h}
+      viewBox={`0 0 ${w} ${h}`}
+      className="inline-block align-middle"
+      aria-hidden="true"
+    >
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 export default function Home() {
@@ -82,8 +161,11 @@ export default function Home() {
   useEffect(() => {
     if (dataByMarket[market] || errorByMarket[market]) return;
     fetch(cfg.endpoint)
-      .then((res) => {
-        if (!res.ok) throw new Error(`요청 실패 (${res.status})`);
+      .then(async (res) => {
+        if (!res.ok) {
+          const j = await res.json().catch(() => null);
+          throw new Error((j && j.error) || `요청 실패 (${res.status})`);
+        }
         return res.json();
       })
       .then((json: ApiResponse) => setDataByMarket((prev) => ({ ...prev, [market]: json })))
@@ -118,7 +200,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-50">
-      <main className="mx-auto max-w-5xl px-4 py-10 sm:px-8">
+      <main className="mx-auto max-w-6xl px-4 py-10 sm:px-8">
         <header className="mb-6">
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
             {cfg.flag} {cfg.label} 주식 52주 신고가 스크리너
@@ -188,15 +270,17 @@ export default function Home() {
             </div>
 
             <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="w-full min-w-[760px] text-sm">
                 <thead className="bg-zinc-100 text-left text-xs uppercase text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
                   <tr>
                     <th className="px-4 py-3">티커</th>
                     <th className="px-4 py-3">종목명</th>
                     <th className="px-4 py-3">{cfg.categoryLabel}</th>
                     <th className="px-4 py-3 text-right">현재가</th>
+                    <th className="px-4 py-3 text-right">시가총액</th>
                     <th className="px-4 py-3 text-right">52주 최고가</th>
                     <th className="px-4 py-3 text-right">고점 대비</th>
+                    <th className="px-4 py-3 text-center">1년 차트</th>
                     <th className="px-4 py-3 text-center">신고가</th>
                   </tr>
                 </thead>
@@ -211,6 +295,9 @@ export default function Home() {
                       <td className="px-4 py-3 text-zinc-500">{categoryOf(market, r)}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{formatPrice(r)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-zinc-500">
+                        {formatMarketCap(r.currency, r.marketCap)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-zinc-500">
                         {formatAmount(r.currency, r.high52w)}
                       </td>
                       <td
@@ -220,6 +307,9 @@ export default function Home() {
                       >
                         {r.pctFromHigh >= 0 ? "+" : ""}
                         {r.pctFromHigh.toFixed(2)}%
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <Sparkline data={r.spark} />
                       </td>
                       <td className="px-4 py-3 text-center">
                         {r.isNewHigh && (
@@ -232,7 +322,7 @@ export default function Home() {
                   ))}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-zinc-500">
+                      <td colSpan={9} className="px-4 py-8 text-center text-zinc-500">
                         조건에 맞는 종목이 없습니다.
                       </td>
                     </tr>
@@ -244,7 +334,7 @@ export default function Home() {
         )}
 
         <footer className="mt-10 text-xs text-zinc-400">
-          데이터 출처: Yahoo Finance (비공식) · 대상: 미국 S&P 500 / 한국 코스피·코스닥 전 종목 / 일본 도쿄증권거래소 전 종목 · 투자 판단의 참고용이며 투자 조언이 아닙니다.
+          데이터 출처: Yahoo Finance (비공식) · 대상: 미국 S&P 500 / 한국 코스피·코스닥 / 일본 도쿄증권거래소 / 홍콩·중국(상하이·선전) 전 종목 · 투자 판단의 참고용이며 투자 조언이 아닙니다.
         </footer>
       </main>
     </div>
