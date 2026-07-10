@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import jpx from "@/data/jpx.json";
-import { scanTickers, buildScreenerResponse, type Ticker } from "@/lib/screener";
+import { scanTickers, finalizeResults, type Ticker } from "@/lib/screener";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -16,5 +16,7 @@ const tickers: Ticker[] = (jpx as JpxRow[]).map((r) => ({
 
 export async function GET() {
   const all = await scanTickers(tickers);
-  return NextResponse.json(buildScreenerResponse("TSE Prime/Standard/Growth", tickers.length, all));
+  return NextResponse.json(
+    await finalizeResults("TSE Prime/Standard/Growth", tickers.length, all, { fillMarketCap: true })
+  );
 }
