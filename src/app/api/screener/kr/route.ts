@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import krx from "@/data/krx.json";
-import { scanTickers, buildScreenerResponse, type Ticker } from "@/lib/screener";
+import { scanTickers, finalizeResults, type Ticker } from "@/lib/screener";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -18,5 +18,7 @@ const tickers: Ticker[] = (krx as KrxRow[]).map((r) => ({
 
 export async function GET() {
   const all = await scanTickers(tickers);
-  return NextResponse.json(buildScreenerResponse("KOSPI + KOSDAQ", tickers.length, all));
+  return NextResponse.json(
+    await finalizeResults("KOSPI + KOSDAQ", tickers.length, all, { fillMarketCap: true })
+  );
 }
