@@ -58,13 +58,12 @@ function downsample(arr: number[], n = 40): number[] | null {
 // 어긋나면(소형·신규주에서 데이터가 부실한 경우) 차트를 그리지 않는다.
 function sanitizeSpark(spark: number[] | null, price: number): number[] | null {
   if (!spark || spark.length < 20) return null;
-  const last = spark[spark.length - 1];
-  if (!isFinite(last) || last <= 0 || !isFinite(price) || price <= 0) return null;
-  if (Math.abs(last / price - 1) > 0.25) return null;
   // 변동이 거의 없는(깨진·평탄한) 데이터는 미표시
   const min = Math.min(...spark);
   const max = Math.max(...spark);
   if (max <= 0 || max - min < max * 0.02) return null;
+  // 마지막을 현재가로 이어붙여 최신 시점까지 반영 (장중 급등한 신고가 종목도 정확히)
+  if (isFinite(price) && price > 0) return [...spark, round2(price)];
   return spark;
 }
 
@@ -78,27 +77,18 @@ async function fetchNaverSpark(symbol: string): Promise<number[] | null> {
     const url = `https://api.finance.naver.com/siseJson.naver?symbol=${code}&requestType=1&startTime=${ymd(
       start
     )}&endTime=${ymd(now)}&timeframe=day`;
-    const resp = await fetch(url, {
+    const text = await fetch(url, {
       headers: { "User-Agent": UA, Referer: "https://finance.naver.com/" },
       next: { revalidate: 900 },
-    });
-    const text = await resp.text();
-    let closes: number[] = [];
-    try {
-      const rows = JSON.parse(text.replace(/'/g, '"')) as (string | number)[][];
-      // rows[0] = 헤더, 각 행 [날짜, 시가, 고가, 저가, 종가, 거래량, ...] → 종가는 index 4
-      closes = rows
-        .slice(1)
-        .map((r) => Number(r[4]))
-        .filter((x) => isFinite(x) && x > 0);
-    } catch {
-      console.log("NAVER_PARSE_FAIL", code, resp.status, "len=" + text.length, text.slice(0, 60));
-      return null;
-    }
-    console.log("NAVER_OK", code, resp.status, "closes=" + closes.length);
+    }).then((r) => r.text());
+    const rows = JSON.parse(text.replace(/'/g, '"')) as (string | number)[][];
+    // rows[0] = 헤더, 각 행 [날짜, 시가, 고가, 저가, 종가, 거래량, ...] → 종가는 index 4
+    const closes = rows
+      .slice(1)
+      .map((r) => Number(r[4]))
+      .filter((x) => isFinite(x) && x > 0);
     return downsample(closes);
-  } catch (e) {
-    console.log("NAVER_ERR", code, String(e).slice(0, 100));
+  } catch {
     return null;
   }
 }
