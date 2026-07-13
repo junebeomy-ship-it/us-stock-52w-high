@@ -22,6 +22,24 @@ const CONCURRENCY = 80;
 const MAX_SANE_PCT_ABOVE_HIGH = 35;
 const UA = "Mozilla/5.0";
 
+// 시가총액 하한(달러 환산, 전 시장 공통) 및 SPAC 제외
+const MIN_MARKET_CAP_USD = 1_000_000_000; // $1B
+const FX_TO_USD: Record<string, number> = {
+  USD: 1,
+  KRW: 1 / 1350,
+  JPY: 1 / 155,
+  HKD: 1 / 7.8,
+  CNY: 1 / 7.2,
+};
+function marketCapUsd(marketCap: number | null, currency: string): number {
+  if (marketCap == null || !isFinite(marketCap)) return 0;
+  const rate = FX_TO_USD[currency] ?? 0;
+  return marketCap * rate;
+}
+function isSpac(name: string): boolean {
+  return /\bacquisition\b|\bspac\b|스팩/i.test(name || "");
+}
+
 function chartUrl(symbol: string): string {
   return `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
     symbol
@@ -336,8 +354,13 @@ export async function finalizeResults(
     )
     .sort((a, b) => b.pctFromHigh - a.pctFromHigh);
 
+  // 시가총액을 먼저 채운 뒤(미국/홍콩/중국은 스크리너에서 이미 있음) SPAC·소형주 제외
   if (opts.fillMarketCap) await attachMarketCaps(near52wHigh);
-  if (opts.fillSpark) await attachSparks(near52wHigh);
+  const results = near52wHigh.filter(
+    (s) => !isSpac(s.name) && marketCapUsd(s.marketCap, s.currency) >= MIN_MARKET_CAP_USD
+  );
+
+  if (opts.fillSpark) await attachSparks(results);
 
   return {
     updatedAt: new Date().toISOString(),
@@ -345,6 +368,6 @@ export async function finalizeResults(
     scanned: all.length,
     total,
     threshold: NEAR_HIGH_THRESHOLD,
-    results: near52wHigh,
+    results,
   };
 }
