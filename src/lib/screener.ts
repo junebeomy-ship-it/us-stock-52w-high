@@ -284,28 +284,37 @@ async function attachMarketCaps(results: StockResult[]): Promise<void> {
 }
 
 async function attachSparks(results: StockResult[]): Promise<void> {
-  const need = results.filter((r) => r.spark == null);
-  for (let i = 0; i < need.length; i += CONCURRENCY) {
-    const batch = need.slice(i, i + CONCURRENCY);
+  const krNeed = results.filter((r) => r.spark == null && isKoreaSymbol(r.symbol));
+  const otherNeed = results.filter((r) => r.spark == null && !isKoreaSymbol(r.symbol));
+
+  // 해외(미국/일본/홍콩/중국): Yahoo 차트, 고동시성
+  for (let i = 0; i < otherNeed.length; i += CONCURRENCY) {
+    const batch = otherNeed.slice(i, i + CONCURRENCY);
     await Promise.all(
       batch.map(async (r) => {
         try {
-          if (isKoreaSymbol(r.symbol)) {
-            // 한국: 네이버 금융 일봉
-            r.spark = sanitizeSpark(await fetchNaverSpark(r.symbol), r.price);
-          } else {
-            const j = await fetch(chartUrl(r.symbol), {
-              headers: { "User-Agent": UA },
-              next: { revalidate: 900 },
-            }).then((x) => x.json());
-            const closes: number[] = j?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
-            r.spark = sanitizeSpark(downsample(closes), r.price);
-          }
+          const j = await fetch(chartUrl(r.symbol), {
+            headers: { "User-Agent": UA },
+            next: { revalidate: 900 },
+          }).then((x) => x.json());
+          const closes: number[] = j?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
+          r.spark = sanitizeSpark(downsample(closes), r.price);
         } catch {
           /* 무시 */
         }
       })
     );
+  }
+
+  // 한국: 네이버 금융 — rate limit 회피 위해 저동시성(3개씩)으로 순차 처리
+  for (let i = 0; i < krNeed.length; i += 3) {
+    const batch = krNeed.slice(i, i + 3);
+    await Promise.all(
+      batch.map(async (r) => {
+        r.spark = sanitizeSpark(await fetchNaverSpark(r.symbol), r.price);
+      })
+    );
+    if (i + 3 < krNeed.length) await new Promise((res) => setTimeout(res, 120));
   }
 }
 
