@@ -19,6 +19,9 @@ const tickers: Ticker[] = (krx as KrxRow[]).map((r) => ({
 export async function GET() {
   const all = await scanTickers(tickers);
   return NextResponse.json(
-    await finalizeResults("KOSPI + KOSDAQ", tickers.length, all, { fillMarketCap: true })
+    await finalizeResults("KOSPI + KOSDAQ", tickers.length, all, {
+      fillMarketCap: true,
+      fillSpark: true,
+    })
   );
 }
