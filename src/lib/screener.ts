@@ -22,8 +22,8 @@ const CONCURRENCY = 80;
 const MAX_SANE_PCT_ABOVE_HIGH = 35;
 const UA = "Mozilla/5.0";
 
-// 시가총액 하한(달러 환산, 전 시장 공통) 및 SPAC 제외
-const MIN_MARKET_CAP_USD = 1_000_000_000; // $1B
+// 시가총액 하한(달러 환산) 및 SPAC 제외
+const DEFAULT_MIN_MARKET_CAP_USD = 100_000_000; // 기본 $100M (미국은 라우트에서 $1B로 지정)
 const FX_TO_USD: Record<string, number> = {
   USD: 1,
   KRW: 1 / 1350,
@@ -345,7 +345,7 @@ export async function finalizeResults(
   universe: string,
   total: number,
   all: StockResult[],
-  opts: { fillMarketCap?: boolean; fillSpark?: boolean } = {}
+  opts: { fillMarketCap?: boolean; fillSpark?: boolean; minMarketCapUsd?: number } = {}
 ) {
   const near52wHigh = all
     .filter(
@@ -356,8 +356,9 @@ export async function finalizeResults(
 
   // 시가총액을 먼저 채운 뒤(미국/홍콩/중국은 스크리너에서 이미 있음) SPAC·소형주 제외
   if (opts.fillMarketCap) await attachMarketCaps(near52wHigh);
+  const minMc = opts.minMarketCapUsd ?? DEFAULT_MIN_MARKET_CAP_USD;
   const results = near52wHigh.filter(
-    (s) => !isSpac(s.name) && marketCapUsd(s.marketCap, s.currency) >= MIN_MARKET_CAP_USD
+    (s) => !isSpac(s.name) && marketCapUsd(s.marketCap, s.currency) >= minMc
   );
 
   if (opts.fillSpark) await attachSparks(results);
