@@ -70,26 +70,35 @@ function sanitizeSpark(spark: number[] | null, price: number): number[] | null {
 
 // 한국 종목 1년 일봉: Yahoo가 flat하게 주는 문제가 있어 네이버 금융에서 가져온다.
 async function fetchNaverSpark(symbol: string): Promise<number[] | null> {
+  const code = symbol.split(".")[0];
   try {
-    const code = symbol.split(".")[0];
     const now = new Date();
     const start = new Date(now);
     start.setFullYear(now.getFullYear() - 1);
     const url = `https://api.finance.naver.com/siseJson.naver?symbol=${code}&requestType=1&startTime=${ymd(
       start
     )}&endTime=${ymd(now)}&timeframe=day`;
-    const text = await fetch(url, {
+    const resp = await fetch(url, {
       headers: { "User-Agent": UA, Referer: "https://finance.naver.com/" },
       next: { revalidate: 900 },
-    }).then((r) => r.text());
-    const rows = JSON.parse(text.replace(/'/g, '"')) as (string | number)[][];
-    // rows[0] = 헤더, 각 행 [날짜, 시가, 고가, 저가, 종가, 거래량, ...] → 종가는 index 4
-    const closes = rows
-      .slice(1)
-      .map((r) => Number(r[4]))
-      .filter((x) => isFinite(x) && x > 0);
+    });
+    const text = await resp.text();
+    let closes: number[] = [];
+    try {
+      const rows = JSON.parse(text.replace(/'/g, '"')) as (string | number)[][];
+      // rows[0] = 헤더, 각 행 [날짜, 시가, 고가, 저가, 종가, 거래량, ...] → 종가는 index 4
+      closes = rows
+        .slice(1)
+        .map((r) => Number(r[4]))
+        .filter((x) => isFinite(x) && x > 0);
+    } catch {
+      console.log("NAVER_PARSE_FAIL", code, resp.status, "len=" + text.length, text.slice(0, 60));
+      return null;
+    }
+    console.log("NAVER_OK", code, resp.status, "closes=" + closes.length);
     return downsample(closes);
-  } catch {
+  } catch (e) {
+    console.log("NAVER_ERR", code, String(e).slice(0, 100));
     return null;
   }
 }
