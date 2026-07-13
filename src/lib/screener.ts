@@ -51,6 +51,10 @@ function sanitizeSpark(spark: number[] | null, price: number): number[] | null {
   const last = spark[spark.length - 1];
   if (!isFinite(last) || last <= 0 || !isFinite(price) || price <= 0) return null;
   if (Math.abs(last / price - 1) > 0.25) return null;
+  // 변동이 거의 없는(깨진·평탄한) 데이터는 미표시 — Yahoo의 한국 종목 일봉이 flat하게 오는 경우 대응
+  const min = Math.min(...spark);
+  const max = Math.max(...spark);
+  if (max <= 0 || max - min < max * 0.02) return null;
   return spark;
 }
 
