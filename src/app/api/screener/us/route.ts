@@ -9,7 +9,10 @@ export async function GET() {
     // 미국 전 종목(NYSE·나스닥 등)을 Yahoo 스크리너로 스캔 — 시가총액 순 상위 위주
     const { results, total } = await scanRegion("us");
     return NextResponse.json(
-      await finalizeResults("미국 전 종목 (NYSE·나스닥 등)", total, results, { fillSpark: true })
+      await finalizeResults("미국 전 종목 (NYSE·나스닥 등)", total, results, {
+        fillSpark: true,
+        minMarketCapUsd: 1_000_000_000,
+      })
     );
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 502 });
