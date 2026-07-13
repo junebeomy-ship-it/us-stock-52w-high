@@ -22,6 +22,7 @@ export async function GET() {
     await finalizeResults("KOSPI + KOSDAQ", tickers.length, all, {
       fillMarketCap: true,
       fillSpark: true,
+      minMarketCapUsd: 0, // 한국은 시가총액 제한 없음 (코스피·코스닥 전 종목)
     })
   );
 }
