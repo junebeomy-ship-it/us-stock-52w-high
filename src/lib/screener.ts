@@ -32,6 +32,16 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+function ymd(d: Date): string {
+  return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+function isKoreaSymbol(symbol: string): boolean {
+  return symbol.endsWith(".KS") || symbol.endsWith(".KQ");
+}
+
 // 1년 종가 배열을 ~40포인트로 다운샘플 (스파크라인용, 페이로드 축소)
 function downsample(arr: number[], n = 40): number[] | null {
   const clean = (arr || []).filter((x) => typeof x === "number" && isFinite(x));
@@ -45,17 +55,43 @@ function downsample(arr: number[], n = 40): number[] | null {
 }
 
 // 차트 신뢰성 검증: 데이터가 너무 적거나(20개 미만) 마지막 종가가 현재가와 25% 이상
-// 어긋나면(소형·신규주에서 Yahoo 데이터가 부실한 경우) 차트를 그리지 않는다.
+// 어긋나면(소형·신규주에서 데이터가 부실한 경우) 차트를 그리지 않는다.
 function sanitizeSpark(spark: number[] | null, price: number): number[] | null {
   if (!spark || spark.length < 20) return null;
   const last = spark[spark.length - 1];
   if (!isFinite(last) || last <= 0 || !isFinite(price) || price <= 0) return null;
   if (Math.abs(last / price - 1) > 0.25) return null;
-  // 변동이 거의 없는(깨진·평탄한) 데이터는 미표시 — Yahoo의 한국 종목 일봉이 flat하게 오는 경우 대응
+  // 변동이 거의 없는(깨진·평탄한) 데이터는 미표시
   const min = Math.min(...spark);
   const max = Math.max(...spark);
   if (max <= 0 || max - min < max * 0.02) return null;
   return spark;
+}
+
+// 한국 종목 1년 일봉: Yahoo가 flat하게 주는 문제가 있어 네이버 금융에서 가져온다.
+async function fetchNaverSpark(symbol: string): Promise<number[] | null> {
+  try {
+    const code = symbol.split(".")[0];
+    const now = new Date();
+    const start = new Date(now);
+    start.setFullYear(now.getFullYear() - 1);
+    const url = `https://api.finance.naver.com/siseJson.naver?symbol=${code}&requestType=1&startTime=${ymd(
+      start
+    )}&endTime=${ymd(now)}&timeframe=day`;
+    const text = await fetch(url, {
+      headers: { "User-Agent": UA, Referer: "https://finance.naver.com/" },
+      next: { revalidate: 900 },
+    }).then((r) => r.text());
+    const rows = JSON.parse(text.replace(/'/g, '"')) as (string | number)[][];
+    // rows[0] = 헤더, 각 행 [날짜, 시가, 고가, 저가, 종가, 거래량, ...] → 종가는 index 4
+    const closes = rows
+      .slice(1)
+      .map((r) => Number(r[4]))
+      .filter((x) => isFinite(x) && x > 0);
+    return downsample(closes);
+  } catch {
+    return null;
+  }
 }
 
 // ---------- Yahoo 인증 (쿠키 + crumb) : 시가총액/스크리너 엔드포인트용 ----------
@@ -123,7 +159,8 @@ async function fetchOne(t: Ticker): Promise<StockResult | null> {
       currency: meta.currency ?? "USD",
       exchange: meta.fullExchangeName ?? meta.exchangeName ?? "",
       marketCap: null,
-      spark: sanitizeSpark(downsample(closes), price),
+      // 한국은 Yahoo 일봉이 부실 → 차트는 finalize 단계에서 네이버로 채운다
+      spark: isKorea ? null : sanitizeSpark(downsample(closes), price),
     };
   } catch {
     return null;
@@ -253,12 +290,17 @@ async function attachSparks(results: StockResult[]): Promise<void> {
     await Promise.all(
       batch.map(async (r) => {
         try {
-          const j = await fetch(chartUrl(r.symbol), {
-            headers: { "User-Agent": UA },
-            next: { revalidate: 900 },
-          }).then((x) => x.json());
-          const closes: number[] = j?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
-          r.spark = sanitizeSpark(downsample(closes), r.price);
+          if (isKoreaSymbol(r.symbol)) {
+            // 한국: 네이버 금융 일봉
+            r.spark = sanitizeSpark(await fetchNaverSpark(r.symbol), r.price);
+          } else {
+            const j = await fetch(chartUrl(r.symbol), {
+              headers: { "User-Agent": UA },
+              next: { revalidate: 900 },
+            }).then((x) => x.json());
+            const closes: number[] = j?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
+            r.spark = sanitizeSpark(downsample(closes), r.price);
+          }
         } catch {
           /* 무시 */
         }
