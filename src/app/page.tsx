@@ -347,6 +347,11 @@ export default function Home() {
             종목은 제외합니다.
           </p>
           <p>
+            <span className="font-semibold text-zinc-600 dark:text-zinc-300">가격 기준</span> — 현재가와 시가총액은
+            실시간 시세가 아닌 <span className="font-medium">직전 정규장 종가</span>를 기준으로 계산합니다. (장중 실시간
+            값의 오류 가능성을 줄이기 위함)
+          </p>
+          <p>
             <span className="font-semibold text-zinc-600 dark:text-zinc-300">대상 시장</span> — 미국(NYSE·나스닥·AMEX)
             / 한국(코스피·코스닥) / 일본(도쿄증권거래소 프라임·스탠다드·그로스) / 홍콩 / 중국(상하이·선전).
           </p>
