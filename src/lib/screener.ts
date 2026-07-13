@@ -178,6 +178,10 @@ export async function scanTickers(tickers: Ticker[]): Promise<StockResult[]> {
 
 // ---------- 지역 전체 스캔 (홍콩/중국: 스크리너 엔드포인트, 시가총액 포함) ----------
 function marketFromExchange(exch: string): string {
+  if (/nasdaq/i.test(exch)) return "NASDAQ";
+  if (/arca/i.test(exch)) return "NYSE Arca";
+  if (/nyse ?american|amex/i.test(exch)) return "AMEX";
+  if (/nyse|new ?york/i.test(exch)) return "NYSE";
   if (/shanghai/i.test(exch)) return "상하이";
   if (/shenzhen/i.test(exch)) return "선전";
   if (/hkse|hong ?kong/i.test(exch)) return "홍콩";
