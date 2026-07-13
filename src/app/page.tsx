@@ -333,8 +333,26 @@ export default function Home() {
           </>
         )}
 
-        <footer className="mt-10 text-xs text-zinc-400">
-          데이터 출처: Yahoo Finance (비공식) · 대상: 미국(NYSE·나스닥) / 한국 코스피·코스닥 / 일본 도쿄증권거래소 / 홍콩·중국(상하이·선전) 전 종목 · 투자 판단의 참고용이며 투자 조언이 아닙니다.
+        <footer className="mt-10 space-y-1.5 border-t border-zinc-200 pt-4 text-xs leading-relaxed text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+          <p>
+            <span className="font-semibold text-zinc-600 dark:text-zinc-300">신고가 선정 기준</span> — 현재가가
+            52주 최고가의 <span className="font-medium">97% 이상(근접)</span>이거나 52주 신고가를 새로 경신한
+            종목을 보여줍니다. (고점 대비 이상치는 제외)
+          </p>
+          <p>
+            <span className="font-semibold text-zinc-600 dark:text-zinc-300">시가총액 하한</span> — 시장별 통화를
+            달러로 환산해 적용합니다. 미국은 <span className="font-medium">10억 달러($1B)</span> 이상, 한국·일본·홍콩·중국은{" "}
+            <span className="font-medium">1억 달러($100M)</span> 이상. SPAC(기업인수목적회사)과 장외(OTC) 종목은
+            제외합니다.
+          </p>
+          <p>
+            <span className="font-semibold text-zinc-600 dark:text-zinc-300">대상 시장</span> — 미국(NYSE·나스닥·AMEX)
+            / 한국(코스피·코스닥) / 일본(도쿄증권거래소 프라임·스탠다드·그로스) / 홍콩 / 중국(상하이·선전).
+          </p>
+          <p className="text-zinc-400 dark:text-zinc-500">
+            데이터 출처: Yahoo Finance (비공식, 한국 차트는 네이버 금융) · 시세는 지연될 수 있으며 투자 판단의
+            참고용입니다. 투자 조언이 아닙니다.
+          </p>
         </footer>
       </main>
     </div>
