@@ -87,6 +87,15 @@ async function fetchNaverSpark(symbol: string): Promise<number[] | null> {
       .slice(1)
       .map((r) => Number(r[4]))
       .filter((x) => isFinite(x) && x > 0);
+    console.log(
+      "NAVERDATA",
+      code,
+      "n=" + closes.length,
+      "min=" + Math.min(...closes),
+      "max=" + Math.max(...closes),
+      "first=" + closes[0],
+      "last=" + closes[closes.length - 1]
+    );
     return downsample(closes);
   } catch {
     return null;
