@@ -50,6 +50,53 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+// 실시간(장중) 시세는 오류 가능성이 높아 "직전 정규장 종가"를 기준으로 삼는다.
+// 차트(일봉 시계열)에서 확정 종가를 고른다: 정규장 진행 중이면 오늘 봉(미확정)을 버리고 전일 종가 사용.
+function settledClosePrice(result: {
+  meta?: {
+    regularMarketPrice?: number;
+    currentTradingPeriod?: { regular?: { start?: number; end?: number } };
+  };
+  indicators?: { quote?: Array<{ close?: (number | null)[] }> };
+}): number | null {
+  const live = result?.meta?.regularMarketPrice;
+  const closes = (result?.indicators?.quote?.[0]?.close || []).filter(
+    (x): x is number => typeof x === "number" && isFinite(x) && x > 0
+  );
+  if (closes.length === 0) return typeof live === "number" ? live : null;
+  const reg = result?.meta?.currentTradingPeriod?.regular;
+  const nowSec = Date.now() / 1000;
+  const marketOpen =
+    !!reg &&
+    typeof reg.start === "number" &&
+    typeof reg.end === "number" &&
+    nowSec >= reg.start &&
+    nowSec < reg.end;
+  const idx = marketOpen && closes.length >= 2 ? closes.length - 2 : closes.length - 1;
+  const chosen = closes[idx];
+  // 장 마감 상태라면 시계열 마지막 종가와 확정가(regularMarketPrice)가 일치해야 정상.
+  // 크게 어긋나면 시계열이 부실한 것 → 확정가 사용.
+  if (!marketOpen && typeof live === "number" && live > 0 && Math.abs(chosen - live) / live > 0.15) {
+    return live;
+  }
+  return chosen;
+}
+
+// 시세 quote(스크리너/일괄 quote)에서 직전 정규장 종가를 고른다.
+// 정규장 진행 중이면 regularMarketPreviousClose(전일 종가), 그 외에는 regularMarketPrice가 이미 확정 종가.
+function settledCloseFromQuote(q: {
+  regularMarketPrice?: number;
+  regularMarketPreviousClose?: number;
+  marketState?: string;
+}): number | null {
+  const live = q.regularMarketPrice;
+  if (typeof live !== "number" || !isFinite(live)) return null;
+  if (q.marketState === "REGULAR" && typeof q.regularMarketPreviousClose === "number") {
+    return q.regularMarketPreviousClose;
+  }
+  return live;
+}
+
 function ymd(d: Date): string {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(
     d.getDate()
@@ -154,7 +201,8 @@ async function fetchOne(t: Ticker): Promise<StockResult | null> {
     ) {
       return null;
     }
-    const price = meta.regularMarketPrice;
+    // 현재가는 실시간이 아닌 직전 정규장 종가 기준
+    const price = settledClosePrice(result) ?? meta.regularMarketPrice;
     const high52w = meta.fiftyTwoWeekHigh;
     const low52w = meta.fiftyTwoWeekLow ?? 0;
     const pctFromHigh = high52w > 0 ? (price / high52w - 1) * 100 : -Infinity;
@@ -248,15 +296,21 @@ export async function scanRegion(
     }
     if (quotes.length === 0) break;
     for (const q of quotes) {
-      const price = q.regularMarketPrice as number;
+      const live = q.regularMarketPrice as number;
       const high52w = q.fiftyTwoWeekHigh as number;
-      if (typeof price !== "number" || typeof high52w !== "number" || high52w <= 0) continue;
+      if (typeof live !== "number" || typeof high52w !== "number" || high52w <= 0) continue;
       // 실제 종목만: 워런트·CBBC·파생상품은 시가총액이 없다 → 시가총액 있는 것만 포함
-      const mc = q.marketCap;
-      if (typeof mc !== "number" || mc <= 0) continue;
+      const mcLive = q.marketCap;
+      if (typeof mcLive !== "number" || mcLive <= 0) continue;
       const exch = (q.fullExchangeName as string) || "";
       // OTC·핑크시트(장외) 종목 제외 — 정규 거래소(NASDAQ/NYSE/AMEX, 홍콩·상하이·선전)만
       if (/otc|pink/i.test(exch)) continue;
+      // 현재가·시가총액 모두 직전 정규장 종가 기준(실시간 오류 방지)
+      const price =
+        settledCloseFromQuote(
+          q as { regularMarketPrice?: number; regularMarketPreviousClose?: number; marketState?: string }
+        ) ?? live;
+      const marketCap = live > 0 ? mcLive * (price / live) : mcLive;
       all.push({
         symbol: q.symbol as string,
         name: (q.longName as string) || (q.shortName as string) || (q.symbol as string),
@@ -269,7 +323,7 @@ export async function scanRegion(
         isNewHigh: price >= high52w,
         currency: (q.currency as string) || "",
         exchange: exch,
-        marketCap: mc,
+        marketCap,
         spark: null,
       });
     }
@@ -297,7 +351,16 @@ async function attachMarketCaps(results: StockResult[]): Promise<void> {
         r.json()
       );
       for (const q of j?.quoteResponse?.result || []) {
-        if (typeof q.marketCap === "number") bySymbol.set(q.symbol, q.marketCap);
+        if (typeof q.marketCap === "number") {
+          // 시가총액도 직전 정규장 종가 기준으로 환산 (시가총액 = 주식수 × 종가)
+          const live = q.regularMarketPrice;
+          const closePx = settledCloseFromQuote(q) ?? live;
+          const mc =
+            typeof live === "number" && live > 0 && typeof closePx === "number"
+              ? q.marketCap * (closePx / live)
+              : q.marketCap;
+          bySymbol.set(q.symbol, mc);
+        }
       }
     } catch {
       /* 시가총액 실패는 무시 (열에 '-' 표시) */
