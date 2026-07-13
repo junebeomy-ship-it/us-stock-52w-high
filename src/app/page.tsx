@@ -37,8 +37,8 @@ const MARKET_CONFIG: Record<
     label: "미국",
     flag: "🇺🇸",
     endpoint: "/api/screener/us",
-    universeDesc: "S&P 500",
-    categoryLabel: "섹터",
+    universeDesc: "미국 전 종목 (NYSE·나스닥 등)",
+    categoryLabel: "거래소",
   },
   KR: {
     label: "한국",
@@ -70,8 +70,8 @@ const MARKET_CONFIG: Record<
   },
 };
 
-function categoryOf(market: Market, r: StockResult): string {
-  return market === "US" ? r.sector : r.market;
+function categoryOf(r: StockResult): string {
+  return r.market || r.sector;
 }
 
 function currencySymbol(cur: string): string {
@@ -177,7 +177,7 @@ export default function Home() {
 
   const categories = useMemo(() => {
     if (!data) return [];
-    return Array.from(new Set(data.results.map((r) => categoryOf(market, r)))).sort();
+    return Array.from(new Set(data.results.map((r) => categoryOf(r)))).sort();
   }, [data, market]);
 
   const filtered = useMemo(() => {
@@ -187,7 +187,7 @@ export default function Home() {
         query.trim() === "" ||
         r.symbol.toLowerCase().includes(query.trim().toLowerCase()) ||
         r.name.toLowerCase().includes(query.trim().toLowerCase());
-      const matchesCategory = category === "전체" || categoryOf(market, r) === category;
+      const matchesCategory = category === "전체" || categoryOf(r) === category;
       return matchesQuery && matchesCategory;
     });
   }, [data, query, category, market]);
@@ -292,7 +292,7 @@ export default function Home() {
                     >
                       <td className="px-4 py-3 font-semibold">{r.symbol}</td>
                       <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">{r.name}</td>
-                      <td className="px-4 py-3 text-zinc-500">{categoryOf(market, r)}</td>
+                      <td className="px-4 py-3 text-zinc-500">{categoryOf(r)}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{formatPrice(r)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-zinc-500">
                         {formatMarketCap(r.currency, r.marketCap)}
@@ -334,7 +334,7 @@ export default function Home() {
         )}
 
         <footer className="mt-10 text-xs text-zinc-400">
-          데이터 출처: Yahoo Finance (비공식) · 대상: 미국 S&P 500 / 한국 코스피·코스닥 / 일본 도쿄증권거래소 / 홍콩·중국(상하이·선전) 전 종목 · 투자 판단의 참고용이며 투자 조언이 아닙니다.
+          데이터 출처: Yahoo Finance (비공식) · 대상: 미국(NYSE·나스닥) / 한국 코스피·코스닥 / 일본 도쿄증권거래소 / 홍콩·중국(상하이·선전) 전 종목 · 투자 판단의 참고용이며 투자 조언이 아닙니다.
         </footer>
       </main>
     </div>
