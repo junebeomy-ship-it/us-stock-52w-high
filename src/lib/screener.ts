@@ -237,6 +237,8 @@ export async function scanRegion(
       const mc = q.marketCap;
       if (typeof mc !== "number" || mc <= 0) continue;
       const exch = (q.fullExchangeName as string) || "";
+      // OTC·핑크시트(장외) 종목 제외 — 정규 거래소(NASDAQ/NYSE/AMEX, 홍콩·상하이·선전)만
+      if (/otc|pink/i.test(exch)) continue;
       all.push({
         symbol: q.symbol as string,
         name: (q.longName as string) || (q.shortName as string) || (q.symbol as string),
