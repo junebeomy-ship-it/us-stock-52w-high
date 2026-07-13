@@ -341,9 +341,10 @@ export default function Home() {
           </p>
           <p>
             <span className="font-semibold text-zinc-600 dark:text-zinc-300">시가총액 하한</span> — 시장별 통화를
-            달러로 환산해 적용합니다. 미국은 <span className="font-medium">10억 달러($1B)</span> 이상, 한국·일본·홍콩·중국은{" "}
-            <span className="font-medium">1억 달러($100M)</span> 이상. SPAC(기업인수목적회사)과 장외(OTC) 종목은
-            제외합니다.
+            달러로 환산해 적용합니다. 미국은 <span className="font-medium">10억 달러($1B)</span> 이상, 일본·홍콩·중국은{" "}
+            <span className="font-medium">1억 달러($100M)</span> 이상, 한국은{" "}
+            <span className="font-medium">제한 없음(코스피·코스닥 전 종목)</span>. SPAC(기업인수목적회사)과 장외(OTC)
+            종목은 제외합니다.
           </p>
           <p>
             <span className="font-semibold text-zinc-600 dark:text-zinc-300">대상 시장</span> — 미국(NYSE·나스닥·AMEX)
